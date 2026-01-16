@@ -82,7 +82,7 @@ def filter_email_domains(subdomains: List[str]) -> List[str]:
     return filtered
 
 
-def read_file_lines(file_path: Path) -> List[str]:
+def read_file_lines(file_path) -> List[str]:
     """
     读取文件的所有行（去除空行和空白字符）
     
@@ -92,6 +92,7 @@ def read_file_lines(file_path: Path) -> List[str]:
     Returns:
         List[str]: 文件行列表
     """
+    file_path = Path(file_path)
     if not file_path.exists():
         return []
     
@@ -101,7 +102,7 @@ def read_file_lines(file_path: Path) -> List[str]:
     return lines
 
 
-def write_file_lines(file_path: Path, lines: List[str]):
+def write_file_lines(file_path, lines: List[str]):
     """
     将列表写入文件（每行一个元素）
     
@@ -109,6 +110,7 @@ def write_file_lines(file_path: Path, lines: List[str]):
         file_path: 文件路径
         lines: 要写入的行列表
     """
+    file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(file_path, 'w', encoding='utf-8') as f:

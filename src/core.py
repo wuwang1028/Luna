@@ -16,6 +16,7 @@ from .utils import (
 from .config import get_output_dir, get_log_file
 from .tools_wrapper import get_tool_wrapper
 from .data_processor import DataProcessor
+from .report import generate_report
 
 
 class LunaCore:
@@ -182,6 +183,19 @@ class LunaCore:
         # 生成汇总
         summary = data_processor.generate_summary()
         self.logger.info(f"数据汇总: {summary}")
+        
+        # 生成报告
+        print_section("生成报告")
+        try:
+            report_files, report_summary = generate_report(target, output_dir, format='csv')
+            print_success(f"报告生成完成")
+            print_info(f"Web资产: {report_summary['web_assets_count']} 条")
+            print_info(f"IP端口: {report_summary['ip_ports_count']} 条")
+            for report_file in report_files:
+                print_info(f"报告文件: {report_file}")
+        except Exception as e:
+            self.logger.exception(f"生成报告失败: {e}")
+            print_error(f"生成报告失败: {e}")
         
         return True
     

@@ -1,0 +1,50 @@
+{
+  "name": "default",
+  "description": "默认完整流程：子域名收集→目录挖掘→HTTP探测→端口扫描→HTTP探测",
+  "created_at": "2026-01-16 12:00:00",
+  "updated_at": "2026-01-16 12:00:00",
+  "tools": [
+    {
+      "name": "oneforall",
+      "order": 1,
+      "alias": null,
+      "description": "子域名收集",
+      "params": {}
+    },
+    {
+      "name": "puzzle",
+      "order": 2,
+      "alias": null,
+      "description": "子域名收集和IP获取",
+      "params": {}
+    },
+    {
+      "name": "dirsearch",
+      "order": 3,
+      "alias": null,
+      "description": "目录挖掘",
+      "params": {}
+    },
+    {
+      "name": "httpx",
+      "order": 4,
+      "alias": "httpx_probe_1",
+      "description": "HTTP探测-目录结果",
+      "params": {}
+    },
+    {
+      "name": "txportmap",
+      "order": 5,
+      "alias": null,
+      "description": "端口扫描",
+      "params": {}
+    },
+    {
+      "name": "httpx",
+      "order": 6,
+      "alias": "httpx_probe_2",
+      "description": "HTTP探测-端口结果",
+      "params": {}
+    }
+  ]
+}

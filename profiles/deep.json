@@ -1,0 +1,43 @@
+{
+  "name": "deep",
+  "description": "深度扫描：全面信息收集+递归目录+漏洞扫描",
+  "created_at": "2026-01-16 12:00:00",
+  "updated_at": "2026-01-16 12:00:00",
+  "tools": [
+    {
+      "name": "oneforall",
+      "order": 1,
+      "alias": null,
+      "description": "子域名收集",
+      "params": {}
+    },
+    {
+      "name": "puzzle",
+      "order": 2,
+      "alias": null,
+      "description": "子域名收集和IP获取",
+      "params": {}
+    },
+    {
+      "name": "ffuf",
+      "order": 3,
+      "alias": null,
+      "description": "递归目录爆破",
+      "params": {}
+    },
+    {
+      "name": "httpx",
+      "order": 4,
+      "alias": null,
+      "description": "HTTP探测",
+      "params": {}
+    },
+    {
+      "name": "fscan",
+      "order": 5,
+      "alias": null,
+      "description": "综合漏洞扫描",
+      "params": {}
+    }
+  ]
+}

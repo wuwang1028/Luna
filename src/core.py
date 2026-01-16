@@ -5,15 +5,17 @@ Luna 核心逻辑模块
 
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from .profile import Profile, ProfileManager
 from .utils import (
     setup_logger, validate_domain, read_file_lines,
     ask_yes_no, print_header, print_section, print_success,
-    print_error, print_info, print_warning
+    print_error, print_info, print_warning, write_file_lines
 )
 from .config import get_output_dir, get_log_file
+from .tools_wrapper import get_tool_wrapper
+from .data_processor import DataProcessor
 
 
 class LunaCore:
@@ -138,6 +140,20 @@ class LunaCore:
         self.logger.info(f"开始处理目标: {target}")
         self.logger.info(f"输出目录: {output_dir}")
         
+        # 创建数据处理器
+        data_processor = DataProcessor(target, output_dir)
+        
+        # 用于存储中间结果
+        context = {
+            'target': target,
+            'output_dir': output_dir,
+            'subdomains': [],
+            'urls': [],
+            'ips': [],
+            'ports': [],
+            'http_probes': []
+        }
+        
         # 执行每个工具
         for tool_config in profile.tools:
             tool_name = tool_config['name']
@@ -146,14 +162,26 @@ class LunaCore:
             
             print_section(f"执行 {alias}")
             
-            # TODO: 这里需要实现工具调用逻辑
-            # 目前只是占位
-            print_info(f"工具: {tool_name}")
-            print_info(f"参数: {params}")
-            print_warning("工具调用功能尚未实现")
+            # 执行工具
+            success = self._execute_tool(
+                tool_name, alias, target, params, 
+                output_dir, context, data_processor
+            )
             
-            # 模拟成功
-            print_success(f"{alias} 执行完成")
+            if not success:
+                print_error(f"{alias} 执行失败")
+                # 根据工具类型决定是否继续
+                if self._is_critical_tool(tool_name):
+                    print_error("关键工具失败，终止流程")
+                    return False
+                else:
+                    print_warning("非关键工具失败，继续执行")
+            else:
+                print_success(f"{alias} 执行完成")
+        
+        # 生成汇总
+        summary = data_processor.generate_summary()
+        self.logger.info(f"数据汇总: {summary}")
         
         return True
     
@@ -297,3 +325,173 @@ class LunaCore:
         targets = list(set(targets))
         
         return targets
+    
+    def _execute_tool(self, tool_name: str, alias: str, target: str, 
+                     params: Dict[str, Any], output_dir: Path, 
+                     context: Dict[str, Any], data_processor: DataProcessor) -> bool:
+        """
+        执行单个工具
+        
+        Args:
+            tool_name: 工具名称
+            alias: 工具别名
+            target: 目标
+            params: 参数
+            output_dir: 输出目录
+            context: 上下文数据
+            data_processor: 数据处理器
+        
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            # 获取工具封装
+            wrapper = get_tool_wrapper(tool_name, output_dir)
+            
+            # 准备目标输入
+            tool_target = self._prepare_tool_target(tool_name, target, context)
+            
+            # 执行工具
+            result = wrapper.execute(tool_target, params)
+            
+            if not result.success:
+                self.logger.error(f"{alias} 执行失败: {result.error}")
+                return False
+            
+            # 处理结果
+            self._process_tool_result(tool_name, alias, result, context, data_processor)
+            
+            return True
+            
+        except Exception as e:
+            self.logger.exception(f"执行 {alias} 时发生异常: {e}")
+            return False
+    
+    def _prepare_tool_target(self, tool_name: str, target: str, context: Dict[str, Any]) -> str:
+        """
+        为工具准备目标输入
+        
+        Args:
+            tool_name: 工具名称
+            target: 原始目标
+            context: 上下文数据
+        
+        Returns:
+            str: 工具的目标输入（可能是文件路径）
+        """
+        # 子域名收集工具直接使用目标域名
+        if tool_name in ['oneforall', 'puzzle']:
+            return target
+        
+        # 目录挖掘工具使用子域名列表
+        if tool_name in ['dirsearch', 'ffuf']:
+            if context['subdomains']:
+                # 创建子域名文件
+                subdomain_file = context['output_dir'] / 'subdomains_for_scan.txt'
+                # 为子域名添加http://前缀
+                urls = [f"http://{sub}" for sub in context['subdomains']]
+                write_file_lines(subdomain_file, urls)
+                return str(subdomain_file)
+            else:
+                return target
+        
+        # HTTP探测工具
+        if tool_name == 'httpx':
+            # 如果有URL列表，使用URL列表
+            if context['urls']:
+                url_file = context['output_dir'] / 'urls_for_probe.txt'
+                write_file_lines(url_file, context['urls'])
+                return str(url_file)
+            # 如果有子域名，使用子域名
+            elif context['subdomains']:
+                subdomain_file = context['output_dir'] / 'subdomains_for_probe.txt'
+                urls = [f"http://{sub}" for sub in context['subdomains']]
+                write_file_lines(subdomain_file, urls)
+                return str(subdomain_file)
+            else:
+                return target
+        
+        # 端口扫描工具使用IP列表
+        if tool_name in ['txportmap', 'fscan']:
+            if context['ips']:
+                ip_file = context['output_dir'] / 'ips_for_scan.txt'
+                write_file_lines(ip_file, context['ips'])
+                return str(ip_file)
+            else:
+                return target
+        
+        return target
+    
+    def _process_tool_result(self, tool_name: str, alias: str, result: Any,
+                            context: Dict[str, Any], data_processor: DataProcessor):
+        """
+        处理工具执行结果
+        
+        Args:
+            tool_name: 工具名称
+            alias: 工具别名
+            result: 工具执行结果
+            context: 上下文数据
+            data_processor: 数据处理器
+        """
+        data = result.data
+        
+        # 处理子域名收集结果
+        if tool_name in ['oneforall', 'puzzle']:
+            if tool_name == 'oneforall':
+                subdomains = data_processor.process_subdomain_results(
+                    oneforall_data=data
+                )
+            else:  # puzzle
+                subdomains = data_processor.process_subdomain_results(
+                    puzzle_data=data
+                )
+                # puzzle还会返回IP
+                if 'ips' in data:
+                    context['ips'].extend(data['ips'])
+                    context['ips'] = list(set(context['ips']))  # 去重
+            
+            context['subdomains'].extend(subdomains)
+            context['subdomains'] = list(set(context['subdomains']))  # 去重
+            print_info(f"当前共有 {len(context['subdomains'])} 个子域名")
+        
+        # 处理目录挖掘结果
+        elif tool_name in ['dirsearch', 'ffuf']:
+            if tool_name == 'dirsearch':
+                urls = data_processor.process_directory_results(dirsearch_data=data)
+            else:  # ffuf
+                urls = data_processor.process_directory_results(ffuf_data=data)
+            
+            context['urls'].extend(urls)
+            context['urls'] = list(set(context['urls']))  # 去重
+            print_info(f"当前共有 {len(context['urls'])} 个URL")
+        
+        # 处理HTTP探测结果
+        elif tool_name == 'httpx':
+            probes = data_processor.process_http_probe_results(data, alias)
+            context['http_probes'].extend(probes)
+            print_info(f"探测到 {len(probes)} 个HTTP服务")
+        
+        # 处理端口扫描结果
+        elif tool_name in ['txportmap', 'fscan']:
+            if tool_name == 'txportmap':
+                ports = data_processor.process_port_scan_results(txportmap_data=data)
+            else:  # fscan
+                ports = data_processor.process_port_scan_results(fscan_data=data)
+            
+            context['ports'].extend(ports)
+            print_info(f"当前共有 {len(context['ports'])} 个开放端口")
+    
+    def _is_critical_tool(self, tool_name: str) -> bool:
+        """
+        判断工具是否为关键工具（失败则终止流程）
+        
+        Args:
+            tool_name: 工具名称
+        
+        Returns:
+            bool: 是否为关键工具
+        """
+        # 子域名收集工具是关键工具
+        critical_tools = ['oneforall', 'puzzle']
+        return tool_name in critical_tools
